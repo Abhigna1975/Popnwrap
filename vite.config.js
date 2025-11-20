@@ -5,5 +5,5 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/Popnwrap/',  // ADD THIS LINE
+  base: '/popnwrap/',  // ADD THIS LINE
 })
