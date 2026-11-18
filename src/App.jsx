@@ -84,22 +84,34 @@ function Home() {
   );
 }
 
+function Arrows({ i, n, setI, big }) {
+  if (n < 2) return null;
+  const go = (d) => (e) => { e.preventDefault(); e.stopPropagation(); setI((i + d + n) % n); };
+  return (
+    <>
+      <button className={`arrow left ${big ? 'big' : ''}`} onClick={go(-1)} aria-label="Previous photo">‹</button>
+      <button className={`arrow right ${big ? 'big' : ''}`} onClick={go(1)} aria-label="Next photo">›</button>
+    </>
+  );
+}
+
 function ProductCard({ p, qty, add, remove }) {
   const [i, setI] = useState(0);
   return (
     <article className="card">
-      <div className="gallery">
+      <Link to={`/product/${p.id}`} className="gallery">
         <img src={p.images[i]} alt={`${p.name}, photo ${i + 1}`} loading="lazy" />
+        <Arrows i={i} n={p.images.length} setI={setI} />
         {p.images.length > 1 && (
           <div className="dots">
             {p.images.map((_, k) => (
-              <button key={k} className={k === i ? 'on' : ''} aria-label={`Show photo ${k + 1}`} onClick={() => setI(k)} />
+              <button key={k} className={k === i ? 'on' : ''} aria-label={`Show photo ${k + 1}`} onClick={(e) => { e.preventDefault(); setI(k); }} />
             ))}
           </div>
         )}
-      </div>
+      </Link>
       <div className="card-body">
-        <h3>{p.name}</h3>
+        <h3><Link to={`/product/${p.id}`}>{p.name}</Link></h3>
         <p className="price">{money(p.price)}</p>
         {qty ? (
           <div className="stepper">
@@ -121,11 +133,76 @@ function Category({ shop }) {
   return (
     <section className="section">
       <Link to="/" className="back">← All bouquets</Link>
-      <div className="head"><h2>{c.title}</h2><p className="muted">{c.products.length} styles. Tap the dots to see more photos.</p></div>
+      <div className="head"><h2>{c.title}</h2><p className="muted">{c.products.length} styles. Use the arrows to see more photos, or open a bouquet for details.</p></div>
       <div className="grid">
         {c.products.map((p) => (
           <ProductCard key={p.id} p={p} qty={shop.cart[p.id]} add={() => shop.add(p.id)} remove={() => shop.remove(p.id)} />
         ))}
+      </div>
+    </section>
+  );
+}
+
+function Product({ shop }) {
+  const { id } = useParams();
+  const p = byId[id];
+  const [i, setI] = useState(0);
+  const [touch, setTouch] = useState(null);
+  useEffect(() => { setI(0); window.scrollTo(0, 0); }, [id]);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!p) return;
+      if (e.key === 'ArrowRight') setI((x) => (x + 1) % p.images.length);
+      if (e.key === 'ArrowLeft') setI((x) => (x - 1 + p.images.length) % p.images.length);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [p]);
+  if (!p) return <Home />;
+  const c = categories.find((x) => x.slug === p.category);
+  const idx = c.products.findIndex((x) => x.id === p.id);
+  const prev = c.products[(idx - 1 + c.products.length) % c.products.length];
+  const next = c.products[(idx + 1) % c.products.length];
+  const qty = shop.cart[p.id];
+  const n = p.images.length;
+  return (
+    <section className="section">
+      <Link to={`/shop/${c.slug}`} className="back">← {c.title}</Link>
+      <div className="pdp">
+        <div>
+          <div className="stage"
+            onTouchStart={(e) => setTouch(e.touches[0].clientX)}
+            onTouchEnd={(e) => { if (touch == null) return; const d = e.changedTouches[0].clientX - touch; if (Math.abs(d) > 40) setI((i + (d < 0 ? 1 : -1) + n) % n); setTouch(null); }}>
+            <img src={p.images[i]} alt={`${p.name}, photo ${i + 1} of ${n}`} />
+            <Arrows i={i} n={n} setI={setI} big />
+            <span className="count">{i + 1} / {n}</span>
+          </div>
+          <div className="thumbs">
+            {p.images.map((src, k) => (
+              <button key={src} className={k === i ? 'on' : ''} onClick={() => setI(k)} aria-label={`Show photo ${k + 1}`}><img src={src} alt="" /></button>
+            ))}
+          </div>
+        </div>
+        <div className="pinfo">
+          <p className="eyebrow">{c.title}</p>
+          <h1>{p.name}</h1>
+          <p className="pprice">{money(p.price)}</p>
+          <p className="muted">Hand wrapped and finished with ribbon. Every bouquet is made to order, so small details can differ from the photos.</p>
+          {qty ? (
+            <div className="stepper"><button onClick={() => shop.remove(p.id)} aria-label="Remove one">−</button><span>{qty} in bag</span><button onClick={() => shop.add(p.id)} aria-label="Add one">+</button></div>
+          ) : (
+            <button className="btn full" onClick={() => shop.add(p.id)}>Add to bag · {money(p.price)}</button>
+          )}
+          {qty > 0 && <Link to="/cart" className="btn ghost full">View bag and check out</Link>}
+          <ul className="facts">
+            <li><b>{n}</b> photos of this bouquet</li>
+            <li>Standard or express shipping at checkout</li>
+          </ul>
+          <div className="pn">
+            <Link to={`/product/${prev.id}`}>‹ {prev.name}</Link>
+            <Link to={`/product/${next.id}`}>{next.name} ›</Link>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -231,6 +308,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/shop/:slug" element={<Category shop={shop} />} />
+          <Route path="/product/:id" element={<Product shop={shop} />} />
           <Route path="/cart" element={<Cart shop={shop} />} />
           <Route path="/checkout" element={<Checkout shop={shop} />} />
           <Route path="*" element={<Home />} />
